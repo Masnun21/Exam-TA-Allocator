@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TA Final Exam Proctoring Scheduler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+<header class="top">
+  <h1>TA Final Exam Proctoring Scheduler</h1>
+  <nav>
+    <button class="tab active" data-tab="import">1. Import</button>
+    <button class="tab" data-tab="data">2. Data</button>
+    <button class="tab" data-tab="schedule">3. Schedule</button>
+    <button class="tab" data-tab="workload">4. Workload</button>
+  </nav>
+</header>
+
+<main>
+  <div id="notice" class="notice" hidden></div>
+  <section class="panel" id="tab-import">
+    <p class="muted">Each semester, upload the final exam routine and the course list. The app reads both, maps every course to its exam slot, and sends the result to the allocator. Nothing is uploaded to a server.</p>
+
+    <div class="card">
+      <div class="bar"><h2>Step 1: Final exam schedule</h2><span class="grow"></span><button data-act="clear-sched" class="ghost">Clear</button></div>
+      <div class="drop" data-drop="sched" role="button" tabindex="0"><b>Drop the exam routine here</b> or click to choose<br><small>PDF, PNG or JPG. Images and scanned PDFs are read with OCR.</small><input type="file" accept=".pdf,image/*" hidden></div>
+      <div id="sched-status"></div>
+      <details class="help"><summary>Why is the class time needed?</summary>
+        <p>The course list says when each section <i>normally meets</i> (for example <b>ST 08:00 AM - 09:30 AM</b>). The exam routine says which date those classes sit their final. The app joins the two using <b>class days + class time</b>, so every exam day below lists the class times that sit on it.</p>
+        <p>The exam time is the same as the class time unless you type a different one (for example 06:00 PM classes sitting at 05:00 PM; the time-shift rule below does that automatically).</p>
+      </details>
+      <p class="muted">Check the extracted routine, or enter it by hand: one block per exam day (class days, date, then every time slot that sits that day). The weekday fills in by itself.</p>
+      <div id="sched-table"></div>
+      <div class="bar"><button data-act="add-day" class="primary">+ Add exam day</button></div>
+      <datalist id="dl-days"></datalist><datalist id="dl-slots"></datalist>
+      <h3>Time-shift rules <small>regular class slot → final exam slot</small></h3>
+      <div id="rules-table"></div>
+      <div class="bar"><button data-act="add-rule">Add rule</button><button data-act="apply-rules">Apply rules to routine</button><span id="rules-msg" class="muted"></span></div>
+    </div>
+
+    <div class="card">
+      <div class="bar"><h2>Step 2: Course list PDF</h2><span class="grow"></span><button data-act="clear-courses" class="ghost">Clear</button></div>
+      <div class="drop" data-drop="courses" role="button" tabindex="0"><b>Drop the course list PDF here</b> or click to choose<br><small>Columns: Sl no., Course, Section, Faculty Initial, Class Time, Class Room, Students Number. Only the first number of “26 (37)” is used.</small><input type="file" accept=".pdf,image/*" hidden></div>
+      <div id="courses-status"></div>
+    </div>
+
+    <div class="card">
+      <div class="bar"><h2>Step 3: Review and send to the allocator</h2><span class="grow"></span>
+        <input id="imp-q" type="search" placeholder="Search course, faculty, room, date…" aria-label="Search">
+        <button data-act="csv">Download CSV</button><button data-act="xlsx">Download Excel</button>
+        <button data-act="handoff" class="primary">Send to allocator</button></div>
+      <div id="imp-stats" class="stats"></div>
+      <div id="imp-unmatched"></div>
+      <div class="scroll" id="imp-table"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="tab-data" hidden>
+    <div class="bar">
+      <p class="muted">Edit the tables directly, or upload a CSV / Excel file. Data is saved in this browser.</p>
+      <span class="grow"></span>
+      <button id="sample">Load sample data</button>
+      <button id="clear" class="ghost">Clear all</button>
+    </div>
+
+    <div class="card">
+      <div class="bar"><h2>Exam calendar <small>follows your exam routine</small></h2><span class="grow"></span>
+        <button data-act="cal-fill" class="primary">Read days and times from imported routine</button><button data-act="cal-add">+ Add exam day</button><button data-act="cal-clear" class="ghost">Clear dates</button></div>
+      <p class="muted">Importing the exam routine fills this in by itself, with whatever class days (RA, ST, MW, …) and time slots your routine has. Without a routine, set the dates by hand. Every TA's <b>Pick</b> button then offers one-tap time slots for these days. <span id="cal-msg"></span></p>
+      <div id="cal-box"></div>
+    </div>
+
+    <div class="card">
+      <div class="bar">
+        <h2>TA roster and personal exams <small id="tas-count"></small></h2>
+        <span class="grow"></span>
+        <label class="btn">Upload CSV / Excel<input type="file" accept=".csv,.xlsx,.xls" data-upload="tas" hidden></label>
+        <button data-tpl="tas">Download template</button>
+        <button data-add="tas">Add TA</button>
+      </div>
+      <p class="muted">Faculty initials are comma-separated (<code>ABC, XYZ</code>). Click <b>Pick</b> in the personal-exams column to choose exam slots with one tap (several per day is fine), or type them yourself, separated by <code>;</code> like <code>2026-12-10 | 09:00-11:00; 2026-12-12 | 14:00-16:00</code>.</p>
+      <div class="scroll" id="tas-table"></div>
+    </div>
+
+    <div class="card">
+      <div class="bar">
+        <h2>Master exam section list <small id="secs-count"></small></h2>
+        <span class="grow"></span>
+        <label class="btn">Upload CSV / Excel<input type="file" accept=".csv,.xlsx,.xls" data-upload="secs" hidden></label>
+        <button data-tpl="secs">Download template</button>
+        <button data-add="secs">Add section</button>
+      </div>
+      <p class="muted">Dates are <code>YYYY-MM-DD</code> (or <code>DD/MM/YYYY</code>), times are 24-hour. More than 50 students means two proctors.</p>
+      <div class="scroll" id="secs-table"></div>
+    </div>
+  </section>
+
+  <section class="panel" id="tab-schedule" hidden>
+    <div class="card">
+      <div class="bar">
+        <button id="gen" class="primary">Generate schedule</button>
+        <label>Gap between exams (min) <input id="buffer" type="number" min="0" step="5" value="0"></label>
+        <span class="grow"></span>
+        <select id="pdf-mode" aria-label="PDF type">
+          <option value="master">Master exam roster</option>
+          <option value="slips">Individual TA duty slips</option>
+        </select>
+        <select id="f-date" aria-label="Filter by date"></select>
+        <select id="f-ta" aria-label="Filter by TA"></select>
+        <button id="pdf">Export to PDF</button>
+      </div>
+      <div id="stats" class="stats"></div>
+      <div id="warnings"></div>
+    </div>
+    <div class="card"><div class="scroll" id="schedule"></div></div>
+  </section>
+
+  <section class="panel" id="tab-workload" hidden>
+    <div class="card">
+      <div id="wl-summary" class="stats"></div>
+      <div class="scroll" id="workload"></div>
+    </div>
+  </section>
+</main>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

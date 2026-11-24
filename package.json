@@ -1,0 +1,11 @@
+{
+  "name": "ta-proctoring-scheduler",
+  "version": "1.0.0",
+  "description": "Automatic, load-balanced TA assignment for final exam proctoring. Static site, runs fully in the browser.",
+  "type": "module",
+  "scripts": {
+    "test": "node test/scheduler.test.mjs && node test/parsers.test.mjs && node test/examslots.test.mjs && node test/order.test.mjs",
+    "start": "python3 -m http.server 8080"
+  },
+  "license": "MIT"
+}
